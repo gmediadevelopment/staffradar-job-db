@@ -112,13 +112,13 @@ export class BACollector implements Collector {
       try {
         // Paginate: fetch up to 5 pages (500 results) per query
         const MAX_PAGES = 5;
-        for (let page = 0; page < MAX_PAGES; page++) {
+        for (let page = 1; page <= MAX_PAGES; page++) {
           const response = await axios.get(BA_BASE, {
             params: {
               was: searchQuery,
               size: 100,
               page: page,
-              veroeffentlichtseit: 30, // Last 30 days for more coverage
+              veroeffentlichtseit: 7,
             },
             headers: {
               'X-API-Key': BA_API_KEY,
@@ -177,8 +177,12 @@ export class BACollector implements Collector {
         await new Promise(r => setTimeout(r, 250));
       } catch (err: any) {
         const msg = `Query "${searchQuery}" failed: ${err.response?.status || ''} ${err.message?.substring(0, 100)}`;
+        if (err.response?.data) {
+          console.warn(`[BA] ${msg} | Body: ${JSON.stringify(err.response.data).substring(0, 200)}`);
+        } else {
+          console.warn(`[BA] ${msg}`);
+        }
         errors.push(msg);
-        console.warn(`[BA] ${msg}`);
       }
     }
 
