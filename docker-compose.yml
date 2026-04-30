@@ -24,10 +24,19 @@ services:
         condition: service_healthy
     ports:
       - "4500:4500"
-    env_file:
-      - .env
     environment:
+      PORT: 4500
+      NODE_ENV: production
       DATABASE_URL: postgresql://staffradar:${DB_PASSWORD:-changeme}@db:5432/staffradar_jobs
+      BA_API_KEY: ${BA_API_KEY:-jobboerse-jobsuche}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_API_KEY: ${ADZUNA_API_KEY:-}
+      JOOBLE_API_KEY: ${JOOBLE_API_KEY:-}
+      CAREERJET_AFFID: ${CAREERJET_AFFID:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+      API_SECRET: ${API_SECRET:-staffradar-secret}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       RUN_ON_START: "true"
 
 volumes:
