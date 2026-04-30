@@ -84,7 +84,6 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
 
   if (params.q) {
     // Support pipe-separated phrases: "SEO|Google Ads|SEA"
-    // Each phrase is a complete search term (multi-word skills stay together)
     const phrases = params.q.includes('|')
       ? params.q.split('|').map(p => p.trim()).filter(p => p.length >= 2)
       : [params.q.trim()];
@@ -92,14 +91,30 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
     console.log(`[Search] Query: "${params.q}" → ${phrases.length} phrases:`, phrases);
 
     if (phrases.length > 1) {
-      // Multi-phrase OR search: match ANY phrase in title or description
-      const phraseConditions = phrases.map((_, i) => {
-        const idx = paramIdx + i;
-        return `title ILIKE '%' || $${idx} || '%' OR COALESCE(description, '') ILIKE '%' || $${idx} || '%'`;
-      });
+      // Multi-phrase OR search with smart matching per phrase
+      const phraseConditions: string[] = [];
+      for (const phrase of phrases) {
+        const idx = paramIdx;
+        paramIdx++;
+        
+        if (phrase.length <= 4 && !phrase.includes(' ')) {
+          // Short terms (SEO, SEA, HR, IT): use word-boundary regex
+          // PostgreSQL \m = word start, \M = word end
+          // This prevents "SEA" matching "reSearch", "seasonal" etc.
+          phraseConditions.push(
+            `(title ~* ('\\m' || $${idx} || '\\M') OR COALESCE(description, '') ~* ('\\m' || $${idx} || '\\M'))`
+          );
+        } else {
+          // Longer phrases (Google Ads, Pflege): ILIKE is fine, phrase is specific
+          phraseConditions.push(
+            `(title ILIKE '%' || $${idx} || '%' OR COALESCE(description, '') ILIKE '%' || $${idx} || '%')`
+          );
+        }
+        values.push(phrase);
+      }
       conditions.push(`(${phraseConditions.join(' OR ')})`);
-      values.push(...phrases);
-      paramIdx += phrases.length;
+      
+      console.log(`[Search] Built ${phraseConditions.length} phrase conditions, ${phraseConditions.filter(c => c.includes('~*')).length} use word-boundary regex`);
     } else {
       // Single term: use full-text search + ILIKE fallback
       conditions.push(`(
