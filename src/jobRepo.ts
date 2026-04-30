@@ -98,11 +98,10 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
         paramIdx++;
         
         if (phrase.length <= 4 && !phrase.includes(' ')) {
-          // Short terms (SEO, SEA, HR, IT): use word-boundary regex
-          // PostgreSQL \m = word start, \M = word end
-          // This prevents "SEA" matching "reSearch", "seasonal" etc.
+          // Short terms (SEO, SEA, HR, IT): ONLY search TITLE with word-boundary
+          // NOT description - prevents matching company names like "SEO GmbH"
           phraseConditions.push(
-            `(title ~* ('\\m' || $${idx} || '\\M') OR COALESCE(description, '') ~* ('\\m' || $${idx} || '\\M'))`
+            `(title ~* ('\\m' || $${idx} || '\\M'))`
           );
         } else {
           // Longer phrases (Google Ads, Pflege): ILIKE is fine, phrase is specific
