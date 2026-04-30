@@ -1,6 +1,6 @@
 /**
- * Arbeitnow API Collector (free, no key needed)
- * Endpoint: https://www.arbeitnow.com/api/job-board-api
+ * Arbeitnow API Collector – Expanded (fetch ALL pages)
+ * Free, no key needed
  */
 import axios from 'axios';
 import type { Collector, CollectorResult } from '../types';
@@ -15,11 +15,11 @@ export class ArbeitnowCollector implements Collector {
     const seenSlugs = new Set<string>();
 
     try {
-      // Arbeitnow returns paginated results
       let page = 1;
       let hasMore = true;
+      const MAX_PAGES = 50; // Get up to 5000 jobs
 
-      while (hasMore && page <= 10) {
+      while (hasMore && page <= MAX_PAGES) {
         const { data } = await axios.get('https://www.arbeitnow.com/api/job-board-api', {
           params: { page },
           timeout: 15000,
@@ -39,7 +39,7 @@ export class ArbeitnowCollector implements Collector {
           allJobs.push({
             external_id: slug,
             source: 'arbeitnow',
-            source_url: job.url ? `https://www.arbeitnow.com/view/${job.slug}` : undefined,
+            source_url: job.slug ? `https://www.arbeitnow.com/view/${job.slug}` : undefined,
             title: job.title,
             company: job.company_name || 'Unbekannt',
             location: job.location || 'Remote',
@@ -52,15 +52,17 @@ export class ArbeitnowCollector implements Collector {
           });
         }
 
-        console.log(`[Arbeitnow] Page ${page} → ${jobs.length} jobs`);
+        console.log(`[Arbeitnow] Page ${page} → ${jobs.length} jobs (total: ${seenSlugs.size})`);
         page++;
         hasMore = !!data.links?.next;
         await new Promise(r => setTimeout(r, 300));
       }
     } catch (err: any) {
+      console.error(`[Arbeitnow] ERROR: ${err.message}`);
       errors.push(err.message?.substring(0, 100));
     }
 
+    console.log(`[Arbeitnow] TOTAL: ${allJobs.length} unique jobs`);
     return { jobs: allJobs, totalAvailable: allJobs.length, errors };
   }
 }
