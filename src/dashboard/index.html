@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StaffRadar – Job Database Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f1117;
+      color: #e4e4e7;
+      min-height: 100vh;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #1a1d27, #252836);
+      border-bottom: 1px solid #2a2d3a;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 700; color: #fff; }
+    .header .badge {
+      background: #10b981;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      background: #1a1d27;
+      border-bottom: 1px solid #2a2d3a;
+      padding: 0 32px;
+    }
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: #71717a;
+      font-size: 13px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: #e4e4e7; }
+    .tab.active { color: #10b981; border-bottom-color: #10b981; }
+
+    .content { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .stat-card .label { font-size: 12px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: #fff; margin-top: 4px; }
+    .stat-card .sub { font-size: 12px; color: #10b981; margin-top: 4px; }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h3 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th { text-align: left; padding: 8px 12px; color: #71717a; font-weight: 500; border-bottom: 1px solid #2a2d3a; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1f2130; }
+    tr:hover { background: #1f2130; }
+
+    .badge-green { background: #065f46; color: #34d399; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-red { background: #7f1d1d; color: #fca5a5; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-yellow { background: #78350f; color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-blue { background: #1e3a5f; color: #93c5fd; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #2a2d3a;
+      background: #252836;
+      color: #e4e4e7;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: #2a2d3a; }
+    .btn-primary { background: #10b981; color: #fff; border-color: #10b981; }
+    .btn-primary:hover { background: #059669; }
+
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .search-bar input {
+      flex: 1;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid #2a2d3a;
+      background: #252836;
+      color: #e4e4e7;
+      font-size: 13px;
+      outline: none;
+    }
+    .search-bar input:focus { border-color: #10b981; }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: #374151;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .toggle.on { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .toggle.on::after { left: 21px; }
+
+    .source-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .source-card {
+      background: #252836;
+      border: 1px solid #2a2d3a;
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .source-card .source-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .source-card .source-name { font-weight: 600; font-size: 14px; }
+    .source-card .source-meta { font-size: 11px; color: #71717a; }
+    
+    .loading { text-align: center; padding: 40px; color: #71717a; }
+    .empty { text-align: center; padding: 40px; color: #52525b; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🗄️ StaffRadar Job Database</h1>
+    <span class="badge" id="healthBadge">Loading...</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('overview')">📊 Overview</button>
+    <button class="tab" onclick="showTab('crawlers')">🤖 Crawler Control</button>
+    <button class="tab" onclick="showTab('jobs')">💼 Job Browser</button>
+    <button class="tab" onclick="showTab('logs')">📋 Logs</button>
+  </div>
+
+  <div class="content" id="content">
+    <div class="loading">Lade Daten...</div>
+  </div>
+
+  <script>
+    // Auth – stored after first prompt
+    let authHeader = localStorage.getItem('adminAuth');
+    if (!authHeader) {
+      const user = prompt('Admin Benutzername:');
+      const pass = prompt('Admin Passwort:');
+      authHeader = 'Basic ' + btoa(user + ':' + pass);
+      localStorage.setItem('adminAuth', authHeader);
+    }
+
+    const headers = { 'Authorization': authHeader, 'Content-Type': 'application/json' };
+    let currentTab = 'overview';
+
+    async function apiFetch(url) {
+      const res = await fetch(url, { headers });
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('adminAuth');
+        location.reload();
+        throw new Error('Auth failed');
+      }
+      return res.json();
+    }
+
+    function showTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab')[['overview','crawlers','jobs','logs'].indexOf(tab)].classList.add('active');
+      renderTab();
+    }
+
+    async function renderTab() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">Lade...</div>';
+
+      try {
+        switch (currentTab) {
+          case 'overview': await renderOverview(content); break;
+          case 'crawlers': await renderCrawlers(content); break;
+          case 'jobs': await renderJobs(content); break;
+          case 'logs': await renderLogs(content); break;
+        }
+      } catch (err) {
+        content.innerHTML = `<div class="card"><p style="color:#ef4444">Fehler: ${err.message}</p></div>`;
+      }
+    }
+
+    async function renderOverview(el) {
+      const stats = await apiFetch('/admin/api/stats');
+      el.innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="label">Gesamt Jobs</div>
+            <div class="value">${stats.total_jobs.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Aktive Jobs</div>
+            <div class="value">${stats.active_jobs.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Heute Neu</div>
+            <div class="value">${stats.new_today.toLocaleString()}</div>
+            <div class="sub">+${stats.new_today} neue Stellen</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Quellen</div>
+            <div class="value">${stats.sources.length}</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Jobs nach Quelle</h3>
+          <table>
+            <thead><tr><th>Quelle</th><th>Aktive Jobs</th><th>Anteil</th></tr></thead>
+            <tbody>
+              ${stats.sources.map(s => `
+                <tr>
+                  <td><strong>${s.source}</strong></td>
+                  <td>${s.count.toLocaleString()}</td>
+                  <td>${stats.active_jobs > 0 ? Math.round(s.count / stats.active_jobs * 100) : 0}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function renderCrawlers(el) {
+      const configs = await apiFetch('/admin/api/crawler-config');
+      el.innerHTML = `
+        <div class="source-grid">
+          ${configs.map(c => `
+            <div class="source-card">
+              <div class="source-header">
+                <span class="source-name">${c.display_name || c.source}</span>
+                <span class="${c.enabled ? 'badge-green' : 'badge-red'}">${c.enabled ? 'Aktiv' : 'Inaktiv'}</span>
+              </div>
+              <div class="source-meta">
+                Typ: ${c.type || 'api'} · Schedule: ${c.schedule}<br>
+                Letzter Lauf: ${c.last_run_at ? new Date(c.last_run_at).toLocaleString('de') : 'Nie'}
+              </div>
+              <div style="display:flex;gap:8px;margin-top:4px">
+                <button class="btn btn-primary" onclick="triggerRun('${c.source}')">▶ Jetzt starten</button>
+                <button class="btn" onclick="toggleCrawler('${c.source}', ${!c.enabled})">${c.enabled ? 'Deaktivieren' : 'Aktivieren'}</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    async function renderJobs(el) {
+      el.innerHTML = `
+        <div class="search-bar">
+          <input type="text" id="jobSearch" placeholder="Jobtitel, Firma, Skills..." onkeydown="if(event.key==='Enter')searchJobs()">
+          <input type="text" id="jobLocation" placeholder="Ort..." style="width:200px" onkeydown="if(event.key==='Enter')searchJobs()">
+          <select id="jobSource" style="padding:8px;border-radius:8px;border:1px solid #2a2d3a;background:#252836;color:#e4e4e7;font-size:13px">
+            <option value="">Alle Quellen</option>
+            <option value="ba">BA</option>
+            <option value="adzuna">Adzuna</option>
+            <option value="jooble">Jooble</option>
+            <option value="careerjet">CareerJet</option>
+            <option value="arbeitnow">Arbeitnow</option>
+          </select>
+          <button class="btn btn-primary" onclick="searchJobs()">Suchen</button>
+        </div>
+        <div id="jobResults"><div class="empty">Suche starten...</div></div>
+      `;
+    }
+
+    async function searchJobs() {
+      const q = document.getElementById('jobSearch').value;
+      const location = document.getElementById('jobLocation').value;
+      const source = document.getElementById('jobSource').value;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (location) params.set('location', location);
+      if (source) params.set('source', source);
+      params.set('limit', '50');
+
+      const result = await apiFetch(`/admin/api/jobs?${params}`);
+      document.getElementById('jobResults').innerHTML = `
+        <div style="margin-bottom:8px;font-size:12px;color:#71717a">${result.total.toLocaleString()} Ergebnisse</div>
+        <table>
+          <thead><tr><th>Titel</th><th>Firma</th><th>Ort</th><th>Quelle</th><th>Datum</th></tr></thead>
+          <tbody>
+            ${result.jobs.map(j => `
+              <tr>
+                <td><a href="${j.source_url || '#'}" target="_blank" style="color:#10b981;text-decoration:none">${j.title}</a></td>
+                <td>${j.company}</td>
+                <td>${j.location || '-'}</td>
+                <td><span class="badge-blue">${j.source}</span></td>
+                <td style="white-space:nowrap">${j.published_at ? new Date(j.published_at).toLocaleDateString('de') : '-'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function renderLogs(el) {
+      const runs = await apiFetch('/admin/api/crawler-runs?limit=100');
+      el.innerHTML = `
+        <div class="card">
+          <h3>Letzte Crawler-Runs</h3>
+          <table>
+            <thead><tr><th>Quelle</th><th>Status</th><th>Gefunden</th><th>Neu</th><th>Aktualisiert</th><th>Dauer</th><th>Zeitpunkt</th><th>Fehler</th></tr></thead>
+            <tbody>
+              ${runs.map(r => {
+                const duration = r.finished_at ? Math.round((new Date(r.finished_at) - new Date(r.started_at)) / 1000) + 's' : '...';
+                const statusBadge = r.status === 'success' ? 'badge-green' : r.status === 'failed' ? 'badge-red' : r.status === 'partial' ? 'badge-yellow' : 'badge-blue';
+                return `
+                  <tr>
+                    <td><strong>${r.source}</strong></td>
+                    <td><span class="${statusBadge}">${r.status}</span></td>
+                    <td>${r.jobs_found}</td>
+                    <td style="color:#10b981">${r.jobs_new}</td>
+                    <td>${r.jobs_updated}</td>
+                    <td>${duration}</td>
+                    <td style="white-space:nowrap">${new Date(r.started_at).toLocaleString('de')}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#ef4444">${r.error_message || ''}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          ${runs.length === 0 ? '<div class="empty">Noch keine Runs</div>' : ''}
+        </div>
+      `;
+    }
+
+    async function triggerRun(source) {
+      await fetch(`/admin/api/crawler-run/${source}`, { method: 'POST', headers });
+      alert(`Collector "${source}" gestartet!`);
+      setTimeout(() => renderTab(), 2000);
+    }
+
+    async function toggleCrawler(source, enabled) {
+      await fetch(`/admin/api/crawler-config/${source}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ enabled }),
+      });
+      renderTab();
+    }
+
+    // Init
+    async function init() {
+      try {
+        const health = await fetch('/health').then(r => r.json());
+        document.getElementById('healthBadge').textContent = `Online · ${Math.round(health.uptime)}s`;
+      } catch { document.getElementById('healthBadge').textContent = 'Offline'; }
+      renderTab();
+    }
+
+    init();
+    setInterval(() => { if (currentTab === 'overview' || currentTab === 'logs') renderTab(); }, 30000);
+  </script>
+</body>
+</html>
