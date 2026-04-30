@@ -55,7 +55,10 @@ export class CareerJetCollector implements Collector {
         console.log(`[CareerJet] "${q}" → ${data.jobs?.length || 0} jobs`);
         await new Promise(r => setTimeout(r, 500));
       } catch (err: any) {
-        errors.push(`"${q}": ${err.message?.substring(0, 80)}`);
+        const msg = `"${q}": ${err.response?.status || ''} ${err.message?.substring(0, 120)}`;
+        console.error(`[CareerJet] ERROR ${msg}`);
+        if (err.response?.data) console.error(`[CareerJet] Response:`, JSON.stringify(err.response.data).substring(0, 200));
+        errors.push(msg);
       }
     }
 

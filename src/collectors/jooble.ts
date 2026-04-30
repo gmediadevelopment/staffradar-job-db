@@ -46,7 +46,9 @@ export class JoobleCollector implements Collector {
         console.log(`[Jooble] "${q}" → ${data.jobs?.length || 0} jobs`);
         await new Promise(r => setTimeout(r, 1000));
       } catch (err: any) {
-        errors.push(`"${q}": ${err.message?.substring(0, 80)}`);
+        const msg = `"${q}": ${err.response?.status || ''} ${err.message?.substring(0, 120)}`;
+        console.error(`[Jooble] ERROR ${msg}`);
+        errors.push(msg);
       }
     }
 

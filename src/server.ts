@@ -25,7 +25,9 @@ app.use(express.json());
 app.use(routes);
 
 // Serve admin dashboard (static files)
-app.use('/admin', express.static(path.join(__dirname, 'dashboard')));
+// HTML files are in src/dashboard (tsc only compiles .ts)
+const dashboardPath = path.join(__dirname, '..', 'src', 'dashboard');
+app.use('/admin', express.static(dashboardPath));
 
 // Health check
 app.get('/health', (_req, res) => {
