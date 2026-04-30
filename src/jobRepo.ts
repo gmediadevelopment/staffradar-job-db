@@ -83,14 +83,29 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
   let paramIdx = 1;
 
   if (params.q) {
-    conditions.push(`(
-      to_tsvector('german', title) @@ plainto_tsquery('german', $${paramIdx})
-      OR to_tsvector('german', COALESCE(description, '')) @@ plainto_tsquery('german', $${paramIdx})
-      OR title ILIKE '%' || $${paramIdx + 1} || '%'
-      OR company ILIKE '%' || $${paramIdx + 1} || '%'
-    )`);
-    values.push(params.q, params.q);
-    paramIdx += 2;
+    // Build OR-based tsquery: "Pflege Altenpflege" → "Pflege | Altenpflege"
+    // Split on spaces, filter empty, join with OR operator
+    const terms = params.q.trim().split(/\s+/).filter(t => t.length >= 2);
+    if (terms.length > 1) {
+      // Multi-term: use OR logic so any skill matches
+      const tsQueryStr = terms.map(t => t.replace(/[^a-zA-ZäöüÄÖÜß0-9]/g, '')).filter(Boolean).join(' | ');
+      conditions.push(`(
+        to_tsvector('german', title || ' ' || COALESCE(description, '')) @@ to_tsquery('german', $${paramIdx})
+        OR ${terms.map((_, i) => `title ILIKE '%' || $${paramIdx + 1 + i} || '%'`).join(' OR ')}
+      )`);
+      values.push(tsQueryStr, ...terms);
+      paramIdx += 1 + terms.length;
+    } else {
+      // Single term: keep simple approach
+      conditions.push(`(
+        to_tsvector('german', title) @@ plainto_tsquery('german', $${paramIdx})
+        OR to_tsvector('german', COALESCE(description, '')) @@ plainto_tsquery('german', $${paramIdx})
+        OR title ILIKE '%' || $${paramIdx + 1} || '%'
+        OR company ILIKE '%' || $${paramIdx + 1} || '%'
+      )`);
+      values.push(params.q, params.q);
+      paramIdx += 2;
+    }
   }
 
   if (params.location) {
