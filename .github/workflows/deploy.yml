@@ -1,8 +1,11 @@
-name: Build & Deploy
+name: Build & Push Image
 
 on:
   push:
     branches: [main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -21,29 +24,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
             ghcr.io/gmediadevelopment/staffradar-job-db:latest
             ghcr.io/gmediadevelopment/staffradar-job-db:${{ github.sha }}
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd /opt/staffradar-job-db
-            git pull origin main
-            docker compose pull app 2>/dev/null || true
-            docker compose up -d --build
-            sleep 5
-            docker compose exec -T app node dist/migrate.js 2>/dev/null || echo "Migration skipped"
-            echo "✅ Deployed!"
