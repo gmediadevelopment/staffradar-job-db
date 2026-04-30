@@ -123,7 +123,7 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
     paramIdx++;
   }
 
-  const limit = Math.min(params.limit || 50, 200);
+  const limit = Math.min(params.limit || 50, 500);
   const offset = params.offset || 0;
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
