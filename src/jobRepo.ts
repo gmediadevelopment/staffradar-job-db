@@ -83,20 +83,25 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
   let paramIdx = 1;
 
   if (params.q) {
-    // Build OR-based tsquery: "Pflege Altenpflege" → "Pflege | Altenpflege"
-    // Split on spaces, filter empty, join with OR operator
-    const terms = params.q.trim().split(/\s+/).filter(t => t.length >= 2);
-    if (terms.length > 1) {
-      // Multi-term: use OR logic so any skill matches
-      const tsQueryStr = terms.map(t => t.replace(/[^a-zA-ZäöüÄÖÜß0-9]/g, '')).filter(Boolean).join(' | ');
-      conditions.push(`(
-        to_tsvector('german', title || ' ' || COALESCE(description, '')) @@ to_tsquery('german', $${paramIdx})
-        OR ${terms.map((_, i) => `title ILIKE '%' || $${paramIdx + 1 + i} || '%'`).join(' OR ')}
-      )`);
-      values.push(tsQueryStr, ...terms);
-      paramIdx += 1 + terms.length;
+    // Support pipe-separated phrases: "SEO|Google Ads|SEA"
+    // Each phrase is a complete search term (multi-word skills stay together)
+    const phrases = params.q.includes('|')
+      ? params.q.split('|').map(p => p.trim()).filter(p => p.length >= 2)
+      : [params.q.trim()];
+
+    console.log(`[Search] Query: "${params.q}" → ${phrases.length} phrases:`, phrases);
+
+    if (phrases.length > 1) {
+      // Multi-phrase OR search: match ANY phrase in title or description
+      const phraseConditions = phrases.map((_, i) => {
+        const idx = paramIdx + i;
+        return `title ILIKE '%' || $${idx} || '%' OR COALESCE(description, '') ILIKE '%' || $${idx} || '%'`;
+      });
+      conditions.push(`(${phraseConditions.join(' OR ')})`);
+      values.push(...phrases);
+      paramIdx += phrases.length;
     } else {
-      // Single term: keep simple approach
+      // Single term: use full-text search + ILIKE fallback
       conditions.push(`(
         to_tsvector('german', title) @@ plainto_tsquery('german', $${paramIdx})
         OR to_tsvector('german', COALESCE(description, '')) @@ plainto_tsquery('german', $${paramIdx})
