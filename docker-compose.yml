@@ -37,7 +37,7 @@ services:
       API_SECRET: ${API_SECRET:-staffradar-secret}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      RUN_ON_START: "true"
+      RUN_ON_START: "false"
 
 volumes:
   pgdata:
