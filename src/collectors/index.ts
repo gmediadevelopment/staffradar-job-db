@@ -6,6 +6,7 @@ import { AdzunaCollector } from './adzuna';
 import { JoobleCollector } from './jooble';
 import { CareerJetCollector } from './careerjet';
 import { ArbeitnowCollector } from './arbeitnow';
+import { GoogleJobsCollector } from './google_jobs';
 import type { Collector } from '../types';
 
 // Registry of all available collectors
@@ -15,6 +16,7 @@ const collectors: Record<string, Collector> = {
   jooble: new JoobleCollector(),
   careerjet: new CareerJetCollector(),
   arbeitnow: new ArbeitnowCollector(),
+  google_jobs: new GoogleJobsCollector(),
 };
 
 export function getCollector(source: string): Collector | undefined {
