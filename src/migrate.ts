@@ -131,6 +131,59 @@ async function migrate() {
   }
   console.log('[Migrate] ✓ default crawler configs seeded');
 
+  // ===== Companies Table (Career Crawler) =====
+  await query(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      domain TEXT,
+      careers_url TEXT,
+      ats_system TEXT,
+      ats_identifier TEXT,
+      ats_feed_url TEXT,
+      industry TEXT,
+      employees_approx INTEGER,
+      hq_location TEXT,
+      crawl_status TEXT DEFAULT 'pending',
+      crawl_last_at TIMESTAMPTZ,
+      crawl_jobs_count INTEGER DEFAULT 0,
+      crawl_error TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+  `);
+  console.log('[Migrate] ✓ companies table');
+
+  const companyIndexes = [
+    'CREATE INDEX IF NOT EXISTS idx_companies_ats ON companies(ats_system)',
+    'CREATE INDEX IF NOT EXISTS idx_companies_status ON companies(crawl_status)',
+    'CREATE INDEX IF NOT EXISTS idx_companies_domain ON companies(domain)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_name_unique ON companies(name)',
+  ];
+  for (const idx of companyIndexes) {
+    try { await query(idx); } catch (err: any) {
+      console.warn(`[Migrate] Company index warning: ${err.message?.substring(0, 80)}`);
+    }
+  }
+  console.log('[Migrate] ✓ company indexes');
+
+  // Seed career_site crawler configs
+  const careerConfigs = [
+    { source: 'career_personio', display_name: 'Karriereseiten (Personio)', type: 'crawler', schedule: '0 3 * * *' },
+    { source: 'career_greenhouse', display_name: 'Karriereseiten (Greenhouse)', type: 'crawler', schedule: '0 3 * * *' },
+    { source: 'career_lever', display_name: 'Karriereseiten (Lever)', type: 'crawler', schedule: '0 4 * * *' },
+    { source: 'career_smartrecruiters', display_name: 'Karriereseiten (SmartRecruiters)', type: 'crawler', schedule: '0 4 * * *' },
+    { source: 'career_recruitee', display_name: 'Karriereseiten (Recruitee)', type: 'crawler', schedule: '0 5 * * *' },
+  ];
+  for (const cfg of careerConfigs) {
+    await query(`
+      INSERT INTO crawler_config (source, display_name, type, enabled, schedule)
+      VALUES ($1, $2, $3, TRUE, $4)
+      ON CONFLICT (source) DO NOTHING
+    `, [cfg.source, cfg.display_name, cfg.type, cfg.schedule]);
+  }
+  console.log('[Migrate] ✓ career crawler configs seeded');
+
   console.log('[Migrate] ✅ Migration complete!');
   await pool.end();
 }

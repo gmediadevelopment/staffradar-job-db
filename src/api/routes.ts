@@ -7,6 +7,7 @@ import { searchJobs, getJobById, getStats, getRecentCrawlerRuns } from '../jobRe
 import { query, execute } from '../db';
 import { getCollector } from '../collectors';
 import { runCollector } from '../scheduler';
+import { getCompanies, upsertCompany, getCompanyStats, detectATS, updateCompanyATS, batchDetectATS } from '../companyRepo';
 import type { CrawlerConfig } from '../types';
 
 const router = Router();
@@ -147,6 +148,103 @@ router.get('/admin/api/jobs', adminAuth, async (req: Request, res: Response) => 
     };
     const result = await searchJobs(params);
     res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== Company Management API =====
+
+router.get('/admin/api/companies', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const filter = {
+      ats_system: String(req.query.ats_system || '') || undefined,
+      crawl_status: String(req.query.crawl_status || '') || undefined,
+      limit: parseInt(String(req.query.limit || '500')) || 500,
+    };
+    const companies = await getCompanies(filter);
+    res.json({ companies, total: companies.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/api/companies/stats', adminAuth, async (_req: Request, res: Response) => {
+  try {
+    const stats = await getCompanyStats();
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/api/companies', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const company = await upsertCompany(req.body);
+    res.json(company);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/api/companies/bulk', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { companies } = req.body;
+    if (!Array.isArray(companies)) return res.status(400).json({ error: 'companies array required' });
+
+    let created = 0;
+    for (const c of companies) {
+      if (!c.name) continue;
+      await upsertCompany(c);
+      created++;
+    }
+    res.json({ ok: true, created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/api/companies/:id/detect-ats', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const company = (await getCompanies({ limit: 1 })).find(c => c.id === req.params.id);
+    if (!company?.careers_url) return res.status(400).json({ error: 'No careers URL' });
+
+    const result = await detectATS(company.careers_url);
+    if (result) {
+      await updateCompanyATS(company.id, result);
+      res.json({ ok: true, ...result });
+    } else {
+      res.json({ ok: false, message: 'ATS not detected' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/api/companies/batch-detect', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(String(req.query.limit || '50')) || 50;
+    res.json({ ok: true, message: `ATS detection started for up to ${limit} companies` });
+    batchDetectATS(limit).catch(err => console.error('[API] Batch detect failed:', err));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/api/companies/:id/crawl', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const company = (await getCompanies({ limit: 1000 })).find(c => c.id === req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!company.ats_system || company.ats_system === 'unknown') {
+      return res.status(400).json({ error: 'ATS not detected yet' });
+    }
+
+    const source = `career_${company.ats_system}`;
+    const collector = getCollector(source);
+    if (!collector) return res.status(400).json({ error: `No collector for ${company.ats_system}` });
+
+    res.json({ ok: true, message: `Crawling ${company.name} via ${company.ats_system}...` });
+    runCollector(source).catch(err => console.error(`[API] Crawl failed:`, err));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
