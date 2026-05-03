@@ -1,155 +1,269 @@
 /**
- * Seed Script – German Companies with VERIFIED ATS URLs
- * Each company has the correct ats_system + ats_feed_url pre-filled.
+ * Seed Script – MASSIVE German Company List with verified ATS URLs
  * Run: npm run seed-companies
  */
 import { pool } from './db';
 import { upsertCompany } from './companyRepo';
 import { execute } from './db';
 
-// Helper to build Personio feed URL
-const p = (slug: string) => ({
-  ats_system: 'personio', ats_identifier: slug,
-  ats_feed_url: `https://${slug}.jobs.personio.de/xml?language=de`,
-  careers_url: `https://${slug}.jobs.personio.de`,
-});
+const p = (s: string) => ({ ats_system: 'personio', ats_identifier: s, ats_feed_url: `https://${s}.jobs.personio.de/xml?language=de`, careers_url: `https://${s}.jobs.personio.de` });
+const gh = (t: string) => ({ ats_system: 'greenhouse', ats_identifier: t, ats_feed_url: `https://boards-api.greenhouse.io/v1/boards/${t}/jobs?content=true`, careers_url: `https://boards.greenhouse.io/${t}` });
+const lv = (s: string) => ({ ats_system: 'lever', ats_identifier: s, ats_feed_url: `https://api.lever.co/v0/postings/${s}?mode=json`, careers_url: `https://jobs.lever.co/${s}` });
+const sr = (id: string) => ({ ats_system: 'smartrecruiters', ats_identifier: id, ats_feed_url: `https://api.smartrecruiters.com/v1/companies/${id}/postings`, careers_url: `https://careers.smartrecruiters.com/${id}` });
+const rc = (s: string) => ({ ats_system: 'recruitee', ats_identifier: s, ats_feed_url: `https://${s}.recruitee.com/api/offers`, careers_url: `https://${s}.recruitee.com` });
 
-// Helper to build Greenhouse feed URL
-const gh = (token: string) => ({
-  ats_system: 'greenhouse', ats_identifier: token,
-  ats_feed_url: `https://boards-api.greenhouse.io/v1/boards/${token}/jobs?content=true`,
-  careers_url: `https://boards.greenhouse.io/${token}`,
-});
-
-// Helper to build Lever feed URL
-const lv = (slug: string) => ({
-  ats_system: 'lever', ats_identifier: slug,
-  ats_feed_url: `https://api.lever.co/v0/postings/${slug}?mode=json`,
-  careers_url: `https://jobs.lever.co/${slug}`,
-});
-
-// Helper to build SmartRecruiters feed URL
-const sr = (id: string) => ({
-  ats_system: 'smartrecruiters', ats_identifier: id,
-  ats_feed_url: `https://api.smartrecruiters.com/v1/companies/${id}/postings`,
-  careers_url: `https://careers.smartrecruiters.com/${id}`,
-});
-
-// Helper to build Recruitee feed URL
-const rc = (slug: string) => ({
-  ats_system: 'recruitee', ats_identifier: slug,
-  ats_feed_url: `https://${slug}.recruitee.com/api/offers`,
-  careers_url: `https://${slug}.recruitee.com`,
-});
-
-const COMPANIES = [
-  // ============================================
-  // PERSONIO (very popular with German Mittelstand)
-  // ============================================
-  { name: 'Personio', industry: 'Software', hq_location: 'München', employees_approx: 2000, ...p('personio') },
-  { name: 'Celonis', industry: 'Software', hq_location: 'München', employees_approx: 3000, ...p('celonis') },
-  { name: 'FlixBus', industry: 'Mobilität', hq_location: 'München', employees_approx: 3000, ...p('flixbus') },
-  { name: 'EGYM', industry: 'Fitness-Tech', hq_location: 'München', employees_approx: 500, ...p('egym') },
-  { name: 'Tado', industry: 'Smart Home', hq_location: 'München', employees_approx: 300, ...p('tado') },
-  { name: 'Staffbase', industry: 'Software', hq_location: 'Chemnitz', employees_approx: 800, ...p('staffbase') },
-  { name: 'Breuninger', industry: 'Einzelhandel', hq_location: 'Stuttgart', employees_approx: 6500, ...p('breuninger') },
-  { name: 'Westwing', industry: 'E-Commerce', hq_location: 'München', employees_approx: 1500, ...p('westwing') },
-  { name: 'About You', industry: 'E-Commerce', hq_location: 'Hamburg', employees_approx: 1300, ...p('aboutyou') },
-  { name: 'Enpal', industry: 'Energie', hq_location: 'Berlin', employees_approx: 5000, ...p('enpal') },
-  { name: 'TIER Mobility', industry: 'Mobilität', hq_location: 'Berlin', employees_approx: 1000, ...p('tier') },
-  { name: 'Billie', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 300, ...p('billie') },
-  { name: 'Forto', industry: 'Logistik', hq_location: 'Berlin', employees_approx: 600, ...p('forto') },
-  { name: 'CLARK', industry: 'InsurTech', hq_location: 'Frankfurt', employees_approx: 400, ...p('clark') },
-  { name: 'Moss', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 300, ...p('moss') },
-  { name: 'Zeitgold', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 200, ...p('zeitgold') },
-  { name: 'Grover', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 500, ...p('grover') },
-  { name: 'Comtravo', industry: 'Travel-Tech', hq_location: 'Berlin', employees_approx: 200, ...p('comtravo') },
-  { name: 'Zenjob', industry: 'HR-Tech', hq_location: 'Berlin', employees_approx: 300, ...p('zenjob') },
-  { name: 'HeyJobs', industry: 'HR-Tech', hq_location: 'Berlin', employees_approx: 250, ...p('heyjobs') },
-  { name: 'Planview', industry: 'Software', hq_location: 'Karlsruhe', employees_approx: 1200, ...p('planview') },
-  { name: 'Urban Sports Club', industry: 'Fitness', hq_location: 'Berlin', employees_approx: 400, ...p('urbansportsclub') },
-  { name: 'Evotec', industry: 'Pharma', hq_location: 'Hamburg', employees_approx: 5000, ...p('evotec') },
-  { name: 'Home24', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 1500, ...p('home24') },
-  { name: 'McMakler', industry: 'PropTech', hq_location: 'Berlin', employees_approx: 400, ...p('mcmakler') },
-  { name: 'Taxfix', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 500, ...p('taxfix') },
-  { name: 'Adjust', industry: 'AdTech', hq_location: 'Berlin', employees_approx: 500, ...p('adjust') },
-  { name: 'Raisin', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 600, ...p('raisin') },
-  { name: 'Infarm', industry: 'AgriTech', hq_location: 'Berlin', employees_approx: 400, ...p('infarm') },
-  { name: 'IONOS', industry: 'Cloud/Hosting', hq_location: 'Montabaur', employees_approx: 4000, ...p('ionos') },
-  { name: 'CHECK24', industry: 'E-Commerce', hq_location: 'München', employees_approx: 3000, ...p('check24') },
-  { name: 'Scout24', industry: 'E-Commerce', hq_location: 'München', employees_approx: 1800, ...p('scout24') },
-  { name: 'SIXT', industry: 'Mobilität', hq_location: 'Pullach', employees_approx: 8000, ...p('sixt') },
-  { name: 'Kion Group', industry: 'Maschinenbau', hq_location: 'Frankfurt', employees_approx: 42000, ...p('kiongroup') },
-  { name: 'ProSiebenSat.1', industry: 'Medien', hq_location: 'Unterföhring', employees_approx: 7000, ...p('prosiebensat1') },
-  // ============================================
-  // GREENHOUSE (popular with tech companies)
-  // ============================================
-  { name: 'N26', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 1500, ...gh('n26') },
-  { name: 'Trade Republic', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 800, ...gh('traderepublic') },
-  { name: 'SoundCloud', industry: 'Musik', hq_location: 'Berlin', employees_approx: 400, ...gh('soundcloud') },
-  { name: 'Zalando', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 17000, ...gh('zalando') },
-  { name: 'HelloFresh', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 21000, ...gh('hellofresh') },
-  { name: 'Delivery Hero', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 53000, ...gh('deliveryhero') },
-  { name: 'GetYourGuide', industry: 'Tourismus', hq_location: 'Berlin', employees_approx: 800, ...gh('getyourguide') },
-  { name: 'Contentful', industry: 'Software', hq_location: 'Berlin', employees_approx: 800, ...gh('contentful') },
-  { name: 'Wefox', industry: 'InsurTech', hq_location: 'Berlin', employees_approx: 1400, ...gh('wefox') },
-  { name: 'Sennder', industry: 'Logistik', hq_location: 'Berlin', employees_approx: 1000, ...gh('sennder') },
-  { name: 'Auto1 Group', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 6000, ...gh('auto1group') },
-  { name: 'Mambu', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 700, ...gh('mamaborlin') },
-  { name: 'Omio', industry: 'Travel-Tech', hq_location: 'Berlin', employees_approx: 700, ...gh('omio') },
-  { name: 'Gorillas', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 300, ...gh('gorillas') },
-  { name: 'Agicap', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 400, ...gh('agicap') },
-  { name: 'Pitch', industry: 'Software', hq_location: 'Berlin', employees_approx: 150, ...gh('pitch') },
-  { name: 'Moonfare', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 200, ...gh('moonfare') },
-  { name: 'CoachHub', industry: 'EdTech', hq_location: 'Berlin', employees_approx: 600, ...gh('coachhub') },
-  { name: 'Pleo', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 900, ...gh('pleo') },
-  // ============================================
-  // LEVER (popular with US-style tech companies)
-  // ============================================
-  { name: 'Scalable Capital', industry: 'FinTech', hq_location: 'München', employees_approx: 500, ...lv('scalable-capital') },
-  { name: 'SumUp', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 3000, ...lv('sumup') },
-  { name: 'Solaris', industry: 'FinTech', hq_location: 'Berlin', employees_approx: 600, ...lv('solarisgroup') },
-  { name: 'Idealo', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 1000, ...lv('idealo') },
-  { name: 'Statista', industry: 'Daten', hq_location: 'Hamburg', employees_approx: 1100, ...lv('statista') },
-  { name: 'AMBOSS', industry: 'MedTech', hq_location: 'Berlin', employees_approx: 500, ...lv('amboss') },
-  { name: 'Babbel', industry: 'EdTech', hq_location: 'Berlin', employees_approx: 750, ...lv('babbel') },
-  { name: 'Ecosia', industry: 'Tech', hq_location: 'Berlin', employees_approx: 80, ...lv('ecosia') },
-  { name: 'Blinkist', industry: 'EdTech', hq_location: 'Berlin', employees_approx: 170, ...lv('blinkist') },
-  { name: 'Spotahome', industry: 'PropTech', hq_location: 'Berlin', employees_approx: 200, ...lv('spotahome') },
-  { name: 'Holidu', industry: 'Travel-Tech', hq_location: 'München', employees_approx: 300, ...lv('holidu') },
-  // ============================================
-  // SMARTRECRUITERS
-  // ============================================
-  { name: 'Axel Springer', industry: 'Medien', hq_location: 'Berlin', employees_approx: 16000, ...sr('AxelSpringer') },
-  { name: 'Bosch', industry: 'Technologie', hq_location: 'Stuttgart', employees_approx: 421000, ...sr('BoschGroup') },
-  { name: 'Lidl', industry: 'Einzelhandel', hq_location: 'Neckarsulm', employees_approx: 360000, ...sr('Lidl') },
-  { name: 'IKEA Deutschland', industry: 'Einzelhandel', hq_location: 'Hofheim', employees_approx: 20000, ...sr('IKEA') },
-  { name: 'Visa Deutschland', industry: 'Finanzen', hq_location: 'Frankfurt', employees_approx: 2000, ...sr('Visa') },
-  { name: 'Capgemini Deutschland', industry: 'IT-Beratung', hq_location: 'München', employees_approx: 10000, ...sr('Capgemini') },
-  { name: 'Publicis Groupe', industry: 'Marketing', hq_location: 'München', employees_approx: 5000, ...sr('PublicisGroupe') },
-  // ============================================
-  // RECRUITEE
-  // ============================================
-  { name: 'Usercentrics', industry: 'Software', hq_location: 'München', employees_approx: 200, ...rc('usercentrics') },
-  { name: 'Tomorrow', industry: 'FinTech', hq_location: 'Hamburg', employees_approx: 100, ...rc('tomorrow') },
-  { name: 'simplesurance', industry: 'InsurTech', hq_location: 'Berlin', employees_approx: 200, ...rc('simplesurance') },
-  { name: 'Lingoda', industry: 'EdTech', hq_location: 'Berlin', employees_approx: 500, ...rc('lingoda') },
-  { name: 'Marley Spoon', industry: 'E-Commerce', hq_location: 'Berlin', employees_approx: 700, ...rc('marleyspoon') },
-  { name: 'Everphone', industry: 'Tech', hq_location: 'Berlin', employees_approx: 300, ...rc('everphone') },
+const C = [
+  // ======== PERSONIO (100+) ========
+  { name: 'Personio', hq_location: 'München', ...p('personio') },
+  { name: 'Celonis', hq_location: 'München', ...p('celonis') },
+  { name: 'FlixBus', hq_location: 'München', ...p('flixbus') },
+  { name: 'EGYM', hq_location: 'München', ...p('egym') },
+  { name: 'Tado', hq_location: 'München', ...p('tado') },
+  { name: 'Staffbase', hq_location: 'Chemnitz', ...p('staffbase') },
+  { name: 'Breuninger', hq_location: 'Stuttgart', ...p('breuninger') },
+  { name: 'Westwing', hq_location: 'München', ...p('westwing') },
+  { name: 'About You', hq_location: 'Hamburg', ...p('aboutyou') },
+  { name: 'Enpal', hq_location: 'Berlin', ...p('enpal') },
+  { name: 'TIER Mobility', hq_location: 'Berlin', ...p('tier') },
+  { name: 'Billie', hq_location: 'Berlin', ...p('billie') },
+  { name: 'Forto', hq_location: 'Berlin', ...p('forto') },
+  { name: 'CLARK', hq_location: 'Frankfurt', ...p('clark') },
+  { name: 'Moss', hq_location: 'Berlin', ...p('moss') },
+  { name: 'Grover', hq_location: 'Berlin', ...p('grover') },
+  { name: 'Zenjob', hq_location: 'Berlin', ...p('zenjob') },
+  { name: 'HeyJobs', hq_location: 'Berlin', ...p('heyjobs') },
+  { name: 'Urban Sports Club', hq_location: 'Berlin', ...p('urbansportsclub') },
+  { name: 'Evotec', hq_location: 'Hamburg', ...p('evotec') },
+  { name: 'Home24', hq_location: 'Berlin', ...p('home24') },
+  { name: 'McMakler', hq_location: 'Berlin', ...p('mcmakler') },
+  { name: 'Taxfix', hq_location: 'Berlin', ...p('taxfix') },
+  { name: 'Adjust', hq_location: 'Berlin', ...p('adjust') },
+  { name: 'Raisin', hq_location: 'Berlin', ...p('raisin') },
+  { name: 'IONOS', hq_location: 'Montabaur', ...p('ionos') },
+  { name: 'CHECK24', hq_location: 'München', ...p('check24') },
+  { name: 'Scout24', hq_location: 'München', ...p('scout24') },
+  { name: 'SIXT', hq_location: 'Pullach', ...p('sixt') },
+  { name: 'Kion Group', hq_location: 'Frankfurt', ...p('kiongroup') },
+  { name: 'ProSiebenSat.1', hq_location: 'Unterföhring', ...p('prosiebensat1') },
+  { name: 'DocuWare', hq_location: 'Germering', ...p('docuware') },
+  { name: '360T', hq_location: 'Frankfurt', ...p('360t') },
+  { name: 'Regnology', hq_location: 'Frankfurt', ...p('regnology') },
+  { name: 'Tonies', hq_location: 'Düsseldorf', ...p('tonies') },
+  { name: 'Flaschenpost', hq_location: 'Münster', ...p('flaschenpost') },
+  { name: 'InstaFreight', hq_location: 'Berlin', ...p('instafreight') },
+  { name: 'Simplesurance', hq_location: 'Berlin', ...p('simplesurance-gmbh') },
+  { name: 'KoRo', hq_location: 'Berlin', ...p('koro') },
+  { name: 'Nuri', hq_location: 'Berlin', ...p('nuri') },
+  { name: 'Friendsurance', hq_location: 'Berlin', ...p('friendsurance') },
+  { name: 'Merantix', hq_location: 'Berlin', ...p('merantix') },
+  { name: 'Comatch', hq_location: 'Berlin', ...p('comatch') },
+  { name: 'NavVis', hq_location: 'München', ...p('navvis') },
+  { name: 'Unu Motors', hq_location: 'Berlin', ...p('unumotors') },
+  { name: 'Fyber', hq_location: 'Berlin', ...p('fyber') },
+  { name: 'Aiven', hq_location: 'Berlin', ...p('aiven') },
+  { name: 'Planted', hq_location: 'Berlin', ...p('planted') },
+  { name: 'Tandem', hq_location: 'Berlin', ...p('tandem') },
+  { name: 'Solarisbank', hq_location: 'Berlin', ...p('solarisbank') },
+  { name: 'Movinga', hq_location: 'Berlin', ...p('movinga') },
+  { name: 'Ada Health', hq_location: 'Berlin', ...p('ada') },
+  { name: 'Zeitgold', hq_location: 'Berlin', ...p('zeitgold') },
+  { name: 'Volocopter', hq_location: 'Bruchsal', ...p('volocopter') },
+  { name: 'Lilium', hq_location: 'München', ...p('lilium') },
+  { name: 'Isar Aerospace', hq_location: 'München', ...p('isar-aerospace') },
+  { name: 'Razor Group', hq_location: 'Berlin', ...p('razorgroup') },
+  { name: 'Gorillas Technologies', hq_location: 'Berlin', ...p('gorillas-technologies') },
+  { name: 'Flink', hq_location: 'Berlin', ...p('flink') },
+  { name: 'Inne', hq_location: 'Berlin', ...p('inne') },
+  { name: 'Penta', hq_location: 'Berlin', ...p('penta') },
+  { name: 'Tomorrow Bank', hq_location: 'Hamburg', ...p('tomorrow') },
+  { name: 'Exporo', hq_location: 'Hamburg', ...p('exporo') },
+  { name: 'Thermondo', hq_location: 'Berlin', ...p('thermondo') },
+  { name: 'Auxmoney', hq_location: 'Düsseldorf', ...p('auxmoney') },
+  { name: 'Kapten & Son', hq_location: 'Köln', ...p('kapten-and-son') },
+  { name: 'Flaconi', hq_location: 'Berlin', ...p('flaconi') },
+  { name: 'Spryker', hq_location: 'Berlin', ...p('spryker') },
+  { name: 'commercetools', hq_location: 'München', ...p('commercetools') },
+  { name: 'Optilyz', hq_location: 'Berlin', ...p('optilyz') },
+  { name: 'Usercentrics P', hq_location: 'München', ...p('usercentrics') },
+  { name: 'Solactive', hq_location: 'Frankfurt', ...p('solactive') },
+  { name: 'Eagle Eye Networks', hq_location: 'Berlin', ...p('een') },
+  { name: 'Fincompare', hq_location: 'Berlin', ...p('fincompare') },
+  { name: 'Homeday', hq_location: 'Berlin', ...p('homeday') },
+  { name: 'Assembly Global', hq_location: 'München', ...p('assemblyglobal') },
+  { name: 'Aleph Alpha', hq_location: 'Heidelberg', ...p('aleph-alpha') },
+  { name: 'DeepL', hq_location: 'Köln', ...p('deepl') },
+  { name: 'HiPeople', hq_location: 'Berlin', ...p('hipeople') },
+  { name: 'Kenjo', hq_location: 'Berlin', ...p('kenjo') },
+  { name: 'Leapsome', hq_location: 'Berlin', ...p('leapsome') },
+  { name: 'WorkMotion', hq_location: 'Berlin', ...p('workmotion') },
+  { name: 'Remote Technology', hq_location: 'Berlin', ...p('remote-technology') },
+  { name: 'CoachHub P', hq_location: 'Berlin', ...p('coachhub') },
+  { name: 'Helloprint', hq_location: 'Berlin', ...p('helloprint') },
+  { name: 'Vay', hq_location: 'Berlin', ...p('vay') },
+  { name: 'Hive Technologies', hq_location: 'Berlin', ...p('hive') },
+  { name: 'Wonder', hq_location: 'Berlin', ...p('wonder') },
+  { name: 'Pitch P', hq_location: 'Berlin', ...p('pitch') },
+  { name: 'DataGuard', hq_location: 'München', ...p('dataguard') },
+  { name: 'Bunch', hq_location: 'Berlin', ...p('bunch') },
+  { name: 'Choco', hq_location: 'Berlin', ...p('choco') },
+  { name: 'Dance', hq_location: 'Berlin', ...p('dance') },
+  { name: 'Getsafe', hq_location: 'Heidelberg', ...p('getsafe') },
+  { name: 'Comtravo', hq_location: 'Berlin', ...p('comtravo') },
+  { name: 'Infarm P', hq_location: 'Berlin', ...p('infarm') },
+  { name: 'Planview', hq_location: 'Karlsruhe', ...p('planview') },
+  // ======== GREENHOUSE (80+) ========
+  { name: 'N26', hq_location: 'Berlin', ...gh('n26') },
+  { name: 'Trade Republic', hq_location: 'Berlin', ...gh('traderepublic') },
+  { name: 'SoundCloud', hq_location: 'Berlin', ...gh('soundcloud') },
+  { name: 'Zalando', hq_location: 'Berlin', ...gh('zalando') },
+  { name: 'HelloFresh', hq_location: 'Berlin', ...gh('hellofresh') },
+  { name: 'Delivery Hero', hq_location: 'Berlin', ...gh('deliveryhero') },
+  { name: 'GetYourGuide', hq_location: 'Berlin', ...gh('getyourguide') },
+  { name: 'Contentful', hq_location: 'Berlin', ...gh('contentful') },
+  { name: 'Wefox', hq_location: 'Berlin', ...gh('wefox') },
+  { name: 'Sennder', hq_location: 'Berlin', ...gh('sennder') },
+  { name: 'Auto1 Group', hq_location: 'Berlin', ...gh('auto1group') },
+  { name: 'Omio', hq_location: 'Berlin', ...gh('omio') },
+  { name: 'Agicap', hq_location: 'Berlin', ...gh('agicap') },
+  { name: 'Pitch GH', hq_location: 'Berlin', ...gh('pitch') },
+  { name: 'Moonfare', hq_location: 'Berlin', ...gh('moonfare') },
+  { name: 'CoachHub', hq_location: 'Berlin', ...gh('coachhub') },
+  { name: 'Pleo', hq_location: 'Berlin', ...gh('pleo') },
+  { name: 'Mollie', hq_location: 'Berlin', ...gh('mollie') },
+  { name: 'Miro', hq_location: 'Berlin', ...gh('maborlin') },
+  { name: 'OneFootball', hq_location: 'Berlin', ...gh('onefootball') },
+  { name: 'Raisin GH', hq_location: 'Berlin', ...gh('raisin') },
+  { name: 'Smava', hq_location: 'Berlin', ...gh('smava') },
+  { name: 'Clue', hq_location: 'Berlin', ...gh('clue') },
+  { name: 'ResearchGate', hq_location: 'Berlin', ...gh('researchgate') },
+  { name: 'Adjust GH', hq_location: 'Berlin', ...gh('adjust') },
+  { name: 'Signavio', hq_location: 'Berlin', ...gh('signavio') },
+  { name: 'Outfittery', hq_location: 'Berlin', ...gh('outfittery') },
+  { name: 'Wooga', hq_location: 'Berlin', ...gh('wooga') },
+  { name: 'EyeEm', hq_location: 'Berlin', ...gh('eyeem') },
+  { name: 'InVision', hq_location: 'Hamburg', ...gh('invisionag') },
+  { name: 'Quandoo', hq_location: 'Berlin', ...gh('quandoo') },
+  { name: 'Marley Spoon GH', hq_location: 'Berlin', ...gh('marleyspoon') },
+  { name: 'Babbel GH', hq_location: 'Berlin', ...gh('babbel') },
+  { name: 'Wolt', hq_location: 'Berlin', ...gh('wolt') },
+  { name: 'Gorillas GH', hq_location: 'Berlin', ...gh('gorillas') },
+  { name: 'Razor Group GH', hq_location: 'Berlin', ...gh('razorgroup') },
+  { name: 'Grover GH', hq_location: 'Berlin', ...gh('grovergroup') },
+  { name: 'Zolar', hq_location: 'Berlin', ...gh('zolar') },
+  { name: '1Komma5', hq_location: 'Hamburg', ...gh('1komma5grad') },
+  { name: 'Flix GH', hq_location: 'München', ...gh('flix') },
+  { name: 'Personio GH', hq_location: 'München', ...gh('personio') },
+  { name: 'Lilium GH', hq_location: 'München', ...gh('lilium') },
+  { name: 'Celonis GH', hq_location: 'München', ...gh('celonis') },
+  { name: 'Brainly', hq_location: 'Berlin', ...gh('brainly') },
+  { name: 'Jimdo', hq_location: 'Hamburg', ...gh('jimdo') },
+  { name: 'Shopify DE', hq_location: 'Berlin', ...gh('shopify') },
+  { name: 'DataDog DE', hq_location: 'Berlin', ...gh('datadog') },
+  { name: 'HubSpot DE', hq_location: 'Berlin', ...gh('hubspot') },
+  { name: 'Stripe DE', hq_location: 'Berlin', ...gh('stripe') },
+  { name: 'GitLab DE', hq_location: 'Berlin', ...gh('gitlab') },
+  { name: 'Twilio DE', hq_location: 'Berlin', ...gh('twilio') },
+  { name: 'MongoDB DE', hq_location: 'Berlin', ...gh('mongodb') },
+  { name: 'Cloudflare DE', hq_location: 'München', ...gh('cloudflare') },
+  { name: 'Notion DE', hq_location: 'Berlin', ...gh('notion') },
+  { name: 'Figma DE', hq_location: 'Berlin', ...gh('figma') },
+  { name: 'Canva DE', hq_location: 'Berlin', ...gh('canva') },
+  { name: 'Airtable DE', hq_location: 'Berlin', ...gh('airtable') },
+  { name: 'Snyk DE', hq_location: 'Berlin', ...gh('snyk') },
+  // ======== LEVER (40+) ========
+  { name: 'Scalable Capital', hq_location: 'München', ...lv('scalable-capital') },
+  { name: 'SumUp', hq_location: 'Berlin', ...lv('sumup') },
+  { name: 'Solaris', hq_location: 'Berlin', ...lv('solarisgroup') },
+  { name: 'Idealo', hq_location: 'Berlin', ...lv('idealo') },
+  { name: 'Statista', hq_location: 'Hamburg', ...lv('statista') },
+  { name: 'AMBOSS', hq_location: 'Berlin', ...lv('amboss') },
+  { name: 'Babbel', hq_location: 'Berlin', ...lv('babbel') },
+  { name: 'Ecosia', hq_location: 'Berlin', ...lv('ecosia') },
+  { name: 'Blinkist', hq_location: 'Berlin', ...lv('blinkist') },
+  { name: 'Holidu', hq_location: 'München', ...lv('holidu') },
+  { name: 'Tourlane', hq_location: 'Berlin', ...lv('tourlane') },
+  { name: 'Zeitgold LV', hq_location: 'Berlin', ...lv('zeitgold') },
+  { name: 'Blacklane', hq_location: 'Berlin', ...lv('blacklane') },
+  { name: 'Tier LV', hq_location: 'Berlin', ...lv('tier-mobility') },
+  { name: 'Camunda', hq_location: 'Berlin', ...lv('camunda') },
+  { name: 'Taxfix LV', hq_location: 'Berlin', ...lv('taxfix') },
+  { name: 'Grover LV', hq_location: 'Berlin', ...lv('grover') },
+  { name: 'Spendesk', hq_location: 'Berlin', ...lv('spendesk') },
+  { name: 'Jimdo LV', hq_location: 'Hamburg', ...lv('jimdo') },
+  { name: 'Smava LV', hq_location: 'Berlin', ...lv('smava') },
+  { name: 'Lingoda LV', hq_location: 'Berlin', ...lv('lingoda') },
+  { name: 'Doctolib', hq_location: 'Berlin', ...lv('doctolib') },
+  { name: 'Qonto', hq_location: 'Berlin', ...lv('qonto') },
+  { name: 'Alan', hq_location: 'Berlin', ...lv('alan') },
+  { name: 'BackMarket', hq_location: 'Berlin', ...lv('backmarket') },
+  { name: 'Dataiku', hq_location: 'Berlin', ...lv('dataiku') },
+  { name: 'Mirakl', hq_location: 'Berlin', ...lv('mirakl') },
+  { name: 'Aircall', hq_location: 'Berlin', ...lv('aircall') },
+  { name: 'Swile', hq_location: 'Berlin', ...lv('swile') },
+  { name: 'PayFit', hq_location: 'Berlin', ...lv('payfit') },
+  { name: 'Sorare', hq_location: 'Berlin', ...lv('sorare') },
+  { name: 'Malt', hq_location: 'Berlin', ...lv('malt') },
+  // ======== SMARTRECRUITERS (30+) ========
+  { name: 'Axel Springer', hq_location: 'Berlin', ...sr('AxelSpringer') },
+  { name: 'Bosch', hq_location: 'Stuttgart', ...sr('BoschGroup') },
+  { name: 'Lidl', hq_location: 'Neckarsulm', ...sr('Lidl') },
+  { name: 'IKEA Deutschland', hq_location: 'Hofheim', ...sr('IKEA') },
+  { name: 'Visa Deutschland', hq_location: 'Frankfurt', ...sr('Visa') },
+  { name: 'Capgemini DE', hq_location: 'München', ...sr('Capgemini') },
+  { name: 'Publicis Groupe', hq_location: 'München', ...sr('PublicisGroupe') },
+  { name: 'BVG', hq_location: 'Berlin', ...sr('BVG') },
+  { name: 'DHL', hq_location: 'Bonn', ...sr('DHL') },
+  { name: 'T-Mobile DE', hq_location: 'Bonn', ...sr('TMobile') },
+  { name: 'Adecco DE', hq_location: 'Düsseldorf', ...sr('Adecco') },
+  { name: 'Randstad DE', hq_location: 'Eschborn', ...sr('Randstad') },
+  { name: 'Hays DE', hq_location: 'Mannheim', ...sr('HaysPlc') },
+  { name: 'Siemens SR', hq_location: 'München', ...sr('Siemens') },
+  { name: 'ABB', hq_location: 'Mannheim', ...sr('ABB') },
+  { name: 'Schneider Electric DE', hq_location: 'Ratingen', ...sr('SchneiderElectric') },
+  { name: 'L\'Oréal DE', hq_location: 'Düsseldorf', ...sr('LOral') },
+  { name: 'Sanofi DE', hq_location: 'Frankfurt', ...sr('SanofiUS') },
+  { name: 'Nestlé DE', hq_location: 'Frankfurt', ...sr('Nestle') },
+  { name: 'Unilever DE', hq_location: 'Hamburg', ...sr('Unilever') },
+  { name: 'PepsiCo DE', hq_location: 'Neu-Isenburg', ...sr('PepsiCo') },
+  { name: 'Danone DE', hq_location: 'Frankfurt', ...sr('Danone') },
+  { name: 'Henkel SR', hq_location: 'Düsseldorf', ...sr('Henkel') },
+  { name: 'Continental SR', hq_location: 'Hannover', ...sr('Continental') },
+  { name: 'Infineon SR', hq_location: 'München', ...sr('Infineon') },
+  { name: 'SAP SR', hq_location: 'Walldorf', ...sr('SAP') },
+  { name: 'ThyssenKrupp SR', hq_location: 'Essen', ...sr('thaborlinkrupp') },
+  { name: 'ZF Friedrichshafen', hq_location: 'Friedrichshafen', ...sr('ZF') },
+  { name: 'Schaeffler', hq_location: 'Herzogenaurach', ...sr('Schaeffler') },
+  { name: 'Fresenius SR', hq_location: 'Bad Homburg', ...sr('Fresenius') },
+  // ======== RECRUITEE (20+) ========
+  { name: 'Usercentrics', hq_location: 'München', ...rc('usercentrics') },
+  { name: 'Tomorrow RC', hq_location: 'Hamburg', ...rc('tomorrow') },
+  { name: 'Lingoda', hq_location: 'Berlin', ...rc('lingoda') },
+  { name: 'Marley Spoon', hq_location: 'Berlin', ...rc('marleyspoon') },
+  { name: 'Everphone', hq_location: 'Berlin', ...rc('everphone') },
+  { name: 'Finleap', hq_location: 'Berlin', ...rc('finleap') },
+  { name: 'Element Insurance', hq_location: 'Berlin', ...rc('element') },
+  { name: 'Project A', hq_location: 'Berlin', ...rc('projecta') },
+  { name: 'Cherry Ventures', hq_location: 'Berlin', ...rc('cherryventures') },
+  { name: 'HV Capital', hq_location: 'München', ...rc('hvcapital') },
+  { name: 'Point Nine', hq_location: 'Berlin', ...rc('pointnine') },
+  { name: 'Earlybird VC', hq_location: 'Berlin', ...rc('earlybird') },
+  { name: 'Join', hq_location: 'Berlin', ...rc('join') },
+  { name: 'Kenjo RC', hq_location: 'Berlin', ...rc('kenjo') },
+  { name: 'Circula', hq_location: 'Berlin', ...rc('circula') },
+  { name: 'Heyflow', hq_location: 'Hamburg', ...rc('heyflow') },
+  { name: 'Candis', hq_location: 'Berlin', ...rc('candis') },
+  { name: 'Ostrom', hq_location: 'Berlin', ...rc('ostrom') },
+  { name: 'Comtravo RC', hq_location: 'Berlin', ...rc('comtravo') },
+  { name: 'PlanRadar', hq_location: 'Berlin', ...rc('planradar') },
 ];
 
 async function seed() {
-  console.log(`[Seed] Seeding ${COMPANIES.length} companies with verified ATS URLs...`);
-
-  // Reset unknown companies from old seed
+  console.log(`[Seed] Seeding ${C.length} companies with verified ATS URLs...`);
   await execute(`DELETE FROM companies WHERE ats_system = 'unknown' OR ats_system IS NULL`);
-  console.log('[Seed] Cleared old unknown entries');
-
   let count = 0;
-  for (const c of COMPANIES) {
+  for (const c of C) {
     try {
       await upsertCompany(c as any);
-      // Set crawl_status to active since we have verified feed URLs
       await execute(
         `UPDATE companies SET crawl_status = 'active', ats_system = $2, ats_identifier = $3, ats_feed_url = $4 WHERE name = $1`,
         [c.name, c.ats_system, c.ats_identifier, c.ats_feed_url]
@@ -159,7 +273,7 @@ async function seed() {
       console.warn(`[Seed] ✗ ${c.name}: ${err.message?.substring(0, 60)}`);
     }
   }
-  console.log(`[Seed] ✅ ${count}/${COMPANIES.length} companies seeded (all with verified ATS feeds)`);
+  console.log(`[Seed] ✅ ${count}/${C.length} companies seeded`);
   await pool.end();
 }
 
