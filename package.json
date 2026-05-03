@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "tsx src/migrate.ts",
-    "seed-companies": "tsx src/seed-companies.ts"
+    "seed-companies": "tsx src/seed-companies.ts",
+    "discover": "tsx src/discover-companies.ts"
   },
   "dependencies": {
     "express": "^4.21.0",
