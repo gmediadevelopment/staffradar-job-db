@@ -75,7 +75,14 @@ function createATSCollector(atsSystem: string, displayName: string): Collector {
 
       for (const company of companies) {
         try {
-          const result = await crawlCompany(company);
+          let result = await crawlCompany(company);
+
+          // Retry once on 429 (rate limited) after waiting 10s
+          if (result.errors.some(e => e.includes('429'))) {
+            console.log(`[CareerCrawler] Rate limited on ${company.name}, waiting 10s and retrying...`);
+            await delay(10000);
+            result = await crawlCompany(company);
+          }
 
           allJobs.push(...result.jobs);
           allErrors.push(...result.errors);
@@ -87,8 +94,8 @@ function createATSCollector(atsSystem: string, displayName: string): Collector {
             crawl_error: result.errors.length > 0 ? result.errors.join('; ') : null,
           });
 
-          // Rate limit: 500ms between companies
-          await delay(500);
+          // Rate limit: 3s between companies to avoid 429
+          await delay(3000);
         } catch (err: any) {
           console.error(`[CareerCrawler] ✗ ${company.name}: ${err.message}`);
           allErrors.push(`${company.name}: ${err.message?.substring(0, 100)}`);
