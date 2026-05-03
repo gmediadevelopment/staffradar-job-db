@@ -98,13 +98,14 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
         paramIdx++;
         
         if (phrase.length <= 4 && !phrase.includes(' ')) {
-          // Short terms (SEO, SEA, HR, IT): ONLY search TITLE with word-boundary
-          // NOT description - prevents matching company names like "SEO GmbH"
+          // Short terms (SEO, SEA, HR, IT): word-boundary in BOTH title AND description
           phraseConditions.push(
-            `(title ~* ('\\m' || $${idx} || '\\M'))`
+            `(title ~* ('\\m' || $${idx} || '\\M') OR COALESCE(description, '') ~* ('\\m' || $${idx} || '\\M'))`
           );
         } else {
-          // Longer phrases (Google Ads, Pflege): ILIKE is fine, phrase is specific
+          // Longer phrases: Title match FIRST (priority), then description
+          // For domain terms like "Pflege" that appear in non-relevant contexts,
+          // we still search description but title matches get ranked higher
           phraseConditions.push(
             `(title ILIKE '%' || $${idx} || '%' OR COALESCE(description, '') ILIKE '%' || $${idx} || '%')`
           );
@@ -166,9 +167,28 @@ export async function searchJobs(params: SearchParams): Promise<SearchResult> {
   const countResult = await queryOne<{ count: string }>(`SELECT COUNT(*) as count FROM jobs ${where}`, values);
   const total = parseInt(countResult?.count || '0');
 
+  // Build ORDER BY: title matches first when query is present
+  let orderBy = 'ORDER BY published_at DESC NULLS LAST, first_seen_at DESC';
+  if (params.q) {
+    // Boost jobs where query terms appear in the TITLE (not just description)
+    const queryPhrases = params.q.includes('|')
+      ? params.q.split('|').map(p => p.trim()).filter(p => p.length >= 2)
+      : [params.q.trim()];
+    
+    // Create a CASE expression that scores title relevance
+    const titleBoosts = queryPhrases.map((_, i) => {
+      const pIdx = paramIdx;
+      paramIdx++;
+      values.push(queryPhrases[i]);
+      return `CASE WHEN title ILIKE '%' || $${pIdx} || '%' THEN 1 ELSE 0 END`;
+    });
+    
+    orderBy = `ORDER BY (${titleBoosts.join(' + ')}) DESC, published_at DESC NULLS LAST`;
+  }
+
   // Get jobs
   const jobs = await query<Job>(
-    `SELECT * FROM jobs ${where} ORDER BY published_at DESC NULLS LAST, first_seen_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+    `SELECT * FROM jobs ${where} ${orderBy} LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     [...values, limit, offset]
   );
 
