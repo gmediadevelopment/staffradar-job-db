@@ -1,31 +1,98 @@
 /**
- * Adzuna API Collector – Expanded with pagination + more queries
- * 250 requests/day free plan
+ * Adzuna API Collector – Aggressive pagination + retry + rate limiting
+ * 
+ * Rate limits (free plan):
+ * - 25 requests/minute
+ * - 250 requests/day
+ * - Max 50 results per page
+ * 
+ * Strategy: 
+ * - 2.5s delay between requests (24 req/min, safe margin)
+ * - Up to 10 pages per query (500 jobs/query)
+ * - Exponential backoff retry on 503/429
+ * - 240 request budget (leaves 10 for manual API use)
  */
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { Collector, CollectorResult } from '../types';
 
 const APP_ID = process.env.ADZUNA_APP_ID;
 const API_KEY = process.env.ADZUNA_API_KEY;
 
+const DELAY_MS = 2500;            // 24 req/min (limit is 25)
+const MAX_PAGES_PER_QUERY = 10;   // Up to 500 jobs per query
+const MAX_REQUESTS = 240;         // Leave 10 of 250 daily for manual use
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 4000;       // 4s, 8s, 16s backoff
+
 const QUERIES = [
-  'Pflege', 'Krankenpflege', 'Altenpflege', 'Pflegefachkraft',
-  'IT', 'Software', 'Informatik', 'Programmierer', 'DevOps',
+  // Pflege/Gesundheit (high volume)
+  'Pflege', 'Pflegefachkraft', 'Krankenpflege', 'Altenpflege', 'Intensivpflege',
+  'Pflegehelfer', 'Gesundheitspfleger',
+  // Medizin
+  'Arzt', 'Medizin', 'Pharma', 'Apotheker', 'Therapeut', 'Zahnarzt',
+  // IT/Software (high volume)
+  'Software Entwickler', 'IT', 'Informatik', 'DevOps', 'Data Engineer',
+  'Programmierer', 'SAP', 'Cloud', 'Frontend', 'Backend',
+  // Ingenieure
   'Ingenieur', 'Maschinenbau', 'Elektrotechnik', 'Bauingenieur',
-  'Marketing', 'Vertrieb', 'Sales',
-  'Kaufmann', 'Bürokaufmann', 'Sachbearbeiter',
-  'Logistik', 'Lager', 'Transport', 'Spedition',
-  'Handwerk', 'Elektriker', 'Mechaniker', 'Schlosser',
-  'Gastronomie', 'Koch', 'Hotel',
-  'Medizin', 'Arzt', 'Pharma', 'Apotheker',
-  'Finanzen', 'Buchhaltung', 'Controlling',
-  'Erzieher', 'Sozialarbeiter', 'Pädagogik',
-  'Produktion', 'Monteur', 'Qualitätssicherung',
-  'Personal', 'HR', 'Recruiting',
-  'Projektmanagement', 'Consulting',
-  'Reinigung', 'Hausmeister',
+  'Verfahrenstechnik', 'Wirtschaftsingenieur',
+  // Kaufmännisch
+  'Kaufmann', 'Sachbearbeiter', 'Bürokaufmann', 'Verwaltung', 'Sekretär',
+  // Marketing/Vertrieb
+  'Marketing', 'Vertrieb', 'Sales', 'SEO', 'Online Marketing',
+  // Logistik
+  'Logistik', 'Lager', 'Transport', 'Spedition', 'Disponent',
+  // Handwerk
+  'Elektriker', 'Mechaniker', 'Schlosser', 'Handwerk', 'Schweißer',
+  'Tischler', 'Maler', 'Installateur',
+  // Gastronomie
+  'Koch', 'Hotel', 'Gastronomie', 'Restaurant', 'Küche',
+  // Finanzen
+  'Buchhaltung', 'Controlling', 'Finanzen', 'Steuerberater', 'Wirtschaftsprüfer',
+  // Soziales/Bildung
+  'Erzieher', 'Sozialarbeiter', 'Pädagogik', 'Lehrer',
+  // Produktion
+  'Produktion', 'Monteur', 'Qualitätssicherung', 'CNC', 'Fertigung',
+  // HR
+  'Personal', 'HR', 'Recruiting', 'Personalreferent',
+  // Weitere
+  'Projektmanagement', 'Consulting', 'Berater',
+  'Reinigung', 'Hausmeister', 'Facility',
   'Sicherheit', 'Werkschutz',
+  'Lkw Fahrer', 'Berufskraftfahrer',
+  'Kundenservice', 'Call Center',
 ];
+
+async function fetchWithRetry(url: string, params: Record<string, any>, retries = MAX_RETRIES): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const { data } = await axios.get(url, { params, timeout: 20000 });
+      return data;
+    } catch (err) {
+      const axErr = err as AxiosError;
+      const status = axErr.response?.status;
+
+      if (status === 503 && attempt < retries) {
+        const delay = RETRY_BASE_MS * Math.pow(2, attempt);
+        console.warn(`[Adzuna] 503 on attempt ${attempt + 1}/${retries + 1}, retrying in ${delay}ms...`);
+        await sleep(delay);
+        continue;
+      }
+
+      if (status === 429 && attempt < retries) {
+        console.warn(`[Adzuna] 429 rate limited, waiting 60s...`);
+        await sleep(60000);
+        continue;
+      }
+
+      throw err;
+    }
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
 export class AdzunaCollector implements Collector {
   name = 'Adzuna';
@@ -39,31 +106,39 @@ export class AdzunaCollector implements Collector {
     const seenIds = new Set<string>();
     let requestCount = 0;
 
-    console.log(`[Adzuna] Starting collection with ${QUERIES.length} queries...`);
+    console.log(`[Adzuna] Starting collection with ${QUERIES.length} queries, ${MAX_PAGES_PER_QUERY} pages each...`);
 
     for (const q of QUERIES) {
-      if (requestCount >= 200) {
-        console.log('[Adzuna] Approaching rate limit, stopping');
+      if (requestCount >= MAX_REQUESTS) {
+        console.log(`[Adzuna] Daily request budget exhausted (${requestCount}/${MAX_REQUESTS})`);
         break;
       }
 
       try {
-        // Fetch up to 3 pages per query
-        for (let page = 1; page <= 3; page++) {
-          const { data } = await axios.get(`https://api.adzuna.com/v1/api/jobs/de/search/${page}`, {
-            params: {
+        let queryTotal = 0;
+
+        for (let page = 1; page <= MAX_PAGES_PER_QUERY; page++) {
+          if (requestCount >= MAX_REQUESTS) break;
+
+          // Rate limit: wait before each request
+          await sleep(DELAY_MS);
+
+          const data = await fetchWithRetry(
+            `https://api.adzuna.com/v1/api/jobs/de/search/${page}`,
+            {
               app_id: APP_ID,
               app_key: API_KEY,
               results_per_page: 50,
               what: q,
               sort_by: 'date',
               max_days_old: 30,
-            },
-            timeout: 15000,
-          });
+            }
+          );
           requestCount++;
 
           const results = data.results || [];
+          const totalAvailable = data.count || 0;
+
           for (const job of results) {
             if (seenIds.has(String(job.id))) continue;
             seenIds.add(String(job.id));
@@ -83,22 +158,30 @@ export class AdzunaCollector implements Collector {
               skills: [],
               published_at: job.created,
             });
+            queryTotal++;
           }
 
-          if (results.length < 50) break; // No more pages
-          await new Promise(r => setTimeout(r, 400));
+          // Stop pagination if no more results or all fetched
+          if (results.length < 50) break;
+          if (page * 50 >= totalAvailable) break;
         }
 
-        console.log(`[Adzuna] "${q}" done (total so far: ${seenIds.size})`);
-        await new Promise(r => setTimeout(r, 300));
+        console.log(`[Adzuna] "${q}" → ${queryTotal} new jobs (total unique: ${seenIds.size}, requests: ${requestCount})`);
       } catch (err: any) {
-        const msg = `"${q}": ${err.response?.status || ''} ${err.message?.substring(0, 100)}`;
+        const status = err.response?.status || '';
+        const msg = `"${q}": ${status} ${err.message?.substring(0, 80)}`;
         console.error(`[Adzuna] ERROR ${msg}`);
         errors.push(msg);
+
+        // If 429/503 persists after retries, wait extra before next query
+        if (status === 503 || status === 429) {
+          console.log('[Adzuna] Backing off 10s after persistent error...');
+          await sleep(10000);
+        }
       }
     }
 
-    console.log(`[Adzuna] TOTAL: ${allJobs.length} unique jobs (${requestCount} requests used)`);
+    console.log(`[Adzuna] ✅ TOTAL: ${allJobs.length} unique jobs (${requestCount} requests used of ${MAX_REQUESTS})`);
     return { jobs: allJobs, totalAvailable: allJobs.length, errors };
   }
 }
