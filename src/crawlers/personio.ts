@@ -2,9 +2,14 @@
  * Personio Career Page Crawler
  * Fetches jobs from Personio XML feeds (public, no auth required)
  * Feed URL: https://{company}.jobs.personio.de/xml?language=de
+ * 
+ * Includes retry logic for 429/5xx errors with exponential backoff.
  */
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { CollectorResult } from '../types';
+
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 5000; // 5s, 10s, 20s
 
 interface PersonioPosition {
   id: string;
@@ -123,6 +128,37 @@ function extractSkillsFromText(text: string): { name: string }[] {
 }
 
 /**
+ * Fetch with retry + exponential backoff for 429/5xx
+ */
+async function fetchWithRetry(url: string, companyName: string): Promise<string> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { data } = await axios.get(url, {
+        timeout: 20000,
+        headers: { 'User-Agent': 'StaffRadar-Crawler/1.0' },
+        responseType: 'text',
+      });
+      return data;
+    } catch (err) {
+      const axErr = err as AxiosError;
+      const status = axErr.response?.status;
+
+      // Retryable errors: 429, 503, 502, 500
+      if ((status === 429 || status === 503 || status === 502 || status === 500) && attempt < MAX_RETRIES) {
+        const waitMs = RETRY_BASE_MS * Math.pow(2, attempt);
+        console.warn(`[Personio] ${companyName}: ${status} → Retry ${attempt + 1}/${MAX_RETRIES} in ${waitMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      throw err;
+    }
+  }
+
+  throw new Error('Max retries exceeded');
+}
+
+/**
  * Crawl a single Personio company
  */
 export async function crawlPersonioCompany(
@@ -131,17 +167,13 @@ export async function crawlPersonioCompany(
 ): Promise<CollectorResult> {
   const errors: string[] = [];
   try {
-    const { data } = await axios.get(feedUrl, {
-      timeout: 15000,
-      headers: { 'User-Agent': 'StaffRadar-Crawler/1.0' },
-      responseType: 'text',
-    });
-
+    const data = await fetchWithRetry(feedUrl, companyName);
     const jobs = parsePersonioXML(data, companyName);
     console.log(`[Personio] ${companyName}: ${jobs.length} jobs`);
     return { jobs, totalAvailable: jobs.length, errors };
   } catch (err: any) {
-    const msg = `${companyName}: ${err.message?.substring(0, 100)}`;
+    const status = err.response?.status ? `${err.response.status} ` : '';
+    const msg = `${companyName}: ${status}${err.message?.substring(0, 100)}`;
     console.error(`[Personio] ✗ ${msg}`);
     errors.push(msg);
     return { jobs: [], errors };

@@ -3,7 +3,10 @@
  * Queries the companies table, dispatches to the correct ATS crawler,
  * and upserts results into the jobs table.
  *
- * Can run per ATS system or all at once.
+ * Key improvements:
+ * - Error companies are retried (not permanently stuck)
+ * - Adaptive delay: increases after 429, decreases on success
+ * - Individual crawler functions have their own retry logic
  */
 import type { Collector, CollectorResult } from '../types';
 import { getCompanies, updateCompanyCrawlState, type Company } from '../companyRepo';
@@ -60,42 +63,67 @@ function createATSCollector(atsSystem: string, displayName: string): Collector {
       const allErrors: string[] = [];
 
       // Get all active companies using this ATS
-      const companies = await getCompanies({
-        ats_system: atsSystem,
-        crawl_status: 'active',
-        limit: 500,
-      });
+      // ALSO include 'error' companies so they get retried every run
+      const [activeCompanies, errorCompanies] = await Promise.all([
+        getCompanies({ ats_system: atsSystem, crawl_status: 'active', limit: 500 }),
+        getCompanies({ ats_system: atsSystem, crawl_status: 'error', limit: 500 }),
+      ]);
+
+      const companies = [...activeCompanies, ...errorCompanies];
 
       if (companies.length === 0) {
-        console.log(`[CareerCrawler] No active ${atsSystem} companies`);
+        console.log(`[CareerCrawler] No ${atsSystem} companies to crawl`);
         return { jobs: [], errors: [] };
       }
 
-      console.log(`[CareerCrawler] Crawling ${companies.length} ${atsSystem} companies...`);
+      const errorCount = errorCompanies.length;
+      console.log(`[CareerCrawler] Crawling ${companies.length} ${atsSystem} companies (${activeCompanies.length} active, ${errorCount} retry)...`);
+
+      let consecutiveErrors = 0;
+      let currentDelay = 3000; // Start with 3s between companies
 
       for (const company of companies) {
         try {
-          let result = await crawlCompany(company);
+          const result = await crawlCompany(company);
 
-          // Retry once on 429 (rate limited) after waiting 10s
-          if (result.errors.some(e => e.includes('429'))) {
-            console.log(`[CareerCrawler] Rate limited on ${company.name}, waiting 10s and retrying...`);
-            await delay(10000);
-            result = await crawlCompany(company);
+          // Check if this company had errors
+          const hasErrors = result.errors.length > 0 && result.jobs.length === 0;
+          const had429 = result.errors.some(e => e.includes('429'));
+
+          if (had429) {
+            consecutiveErrors++;
+            // Increase delay after rate limits (up to 15s)
+            currentDelay = Math.min(currentDelay + 3000, 15000);
+            console.log(`[CareerCrawler] Rate limited, increasing delay to ${currentDelay / 1000}s (${consecutiveErrors} consecutive errors)`);
+          } else {
+            if (consecutiveErrors > 0) {
+              consecutiveErrors = 0;
+              // Slowly decrease delay back to normal
+              currentDelay = Math.max(currentDelay - 1000, 3000);
+            }
           }
 
           allJobs.push(...result.jobs);
           allErrors.push(...result.errors);
 
           // Update company crawl state
+          // Don't mark as 'error' if we got a 429 – these are temporary
           await updateCompanyCrawlState(company.id, {
-            crawl_status: result.errors.length > 0 && result.jobs.length === 0 ? 'error' : 'active',
+            crawl_status: hasErrors && !had429 ? 'error' : 'active',
             crawl_jobs_count: result.jobs.length,
             crawl_error: result.errors.length > 0 ? result.errors.join('; ') : null,
           });
 
-          // Rate limit: 3s between companies to avoid 429
-          await delay(3000);
+          // If we get 5+ consecutive 429s, wait a full minute to let rate limit reset
+          if (consecutiveErrors >= 5) {
+            console.log(`[CareerCrawler] 5+ consecutive rate limits, cooling down 60s...`);
+            await delay(60000);
+            consecutiveErrors = 0;
+            currentDelay = 5000;
+          }
+
+          // Rate limit: adaptive delay between companies
+          await delay(currentDelay);
         } catch (err: any) {
           console.error(`[CareerCrawler] ✗ ${company.name}: ${err.message}`);
           allErrors.push(`${company.name}: ${err.message?.substring(0, 100)}`);
@@ -107,7 +135,7 @@ function createATSCollector(atsSystem: string, displayName: string): Collector {
         }
       }
 
-      console.log(`[CareerCrawler] ${atsSystem}: ${allJobs.length} jobs from ${companies.length} companies`);
+      console.log(`[CareerCrawler] ${atsSystem}: ${allJobs.length} jobs from ${companies.length} companies (${allErrors.length} errors)`);
       return { jobs: allJobs, totalAvailable: allJobs.length, errors: allErrors };
     },
   };
